@@ -183,7 +183,7 @@ test('deduplicates repeated Codex cumulative token snapshots', (tmp) => {
   assert.equal(parsed.messages.reduce((sum, message) => sum + message.outputTokens, 0), 150);
 });
 
-test('Codex mode tracker blocks /caveman-stats with parsed stats', (tmp) => {
+test('Codex mode tracker returns /caveman-stats as visible context', (tmp) => {
   const sess = makeCodexSession(tmp, [
     { type: 'turn_context', payload: { model: 'gpt-5.6-sol' } },
     { type: 'event_msg', payload: { type: 'token_count', info: {
@@ -204,8 +204,9 @@ test('Codex mode tracker blocks /caveman-stats with parsed stats', (tmp) => {
     input: JSON.stringify({ prompt: '/caveman-stats', transcript_path: sess }),
   });
   const parsed = JSON.parse(out);
-  assert.strictEqual(parsed.decision, 'block');
-  assert.match(parsed.reason, /Output tokens:\s+75/);
+  assert.strictEqual(parsed.hookSpecificOutput.hookEventName, 'UserPromptSubmit');
+  assert.match(parsed.hookSpecificOutput.additionalContext, /Return this Caveman stats result verbatim/);
+  assert.match(parsed.hookSpecificOutput.additionalContext, /Output tokens:\s+75/);
 });
 
 test('stats failure advice points at installed script path', (tmp) => {
@@ -215,9 +216,9 @@ test('stats failure advice points at installed script path', (tmp) => {
     input: JSON.stringify({ prompt: '/caveman-stats --since invalid' }),
   });
   const parsed = JSON.parse(out);
-  assert.strictEqual(parsed.decision, 'block');
-  assert.match(parsed.reason, /src[\\/]hooks[\\/]caveman-stats\.js/);
-  assert.doesNotMatch(parsed.reason, /node hooks[\\/]caveman-stats\.js/);
+  assert.strictEqual(parsed.hookSpecificOutput.hookEventName, 'UserPromptSubmit');
+  assert.match(parsed.hookSpecificOutput.additionalContext, /src[\\/]hooks[\\/]caveman-stats\.js/);
+  assert.doesNotMatch(parsed.hookSpecificOutput.additionalContext, /node hooks[\\/]caveman-stats\.js/);
 });
 
 test('shows USD savings when model is a known sonnet variant', (tmp) => {
