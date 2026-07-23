@@ -340,6 +340,7 @@ class HookScriptTests(unittest.TestCase):
             self.assertIn(script, handler["commandWindows"])
             self.assertIn("%PLUGIN_ROOT%", handler["commandWindows"])
             self.assertNotIn("command_windows", handler)
+        self.assertNotIn("statusMessage", hooks["UserPromptSubmit"][0]["hooks"][0])
 
 
 if __name__ == "__main__":

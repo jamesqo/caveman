@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { getDefaultMode, getAgentConfigDir, safeWriteFlag, readFlag, recordModeChange, VALID_MODES } = require('./caveman-config');
+const { getDefaultMode, getAgentConfigDir, isCodexHook, safeWriteFlag, readFlag, recordModeChange, VALID_MODES } = require('./caveman-config');
 
 // Modes handled by their own slash commands (/caveman-commit, etc.) — not
 // selectable via /caveman <arg>.
@@ -69,9 +69,9 @@ process.stdin.on('end', () => {
       }
     }
 
-    // /caveman-stats [--share] — block the prompt and inject stats output as
-    // the hook's reason. The script reads the active session log, so we pass
-    // transcript_path through when Claude Code provides it.
+    // /caveman-stats [--share] — Claude Code displays a blocked prompt's
+    // reason, but Codex ignores that legacy response on UserPromptSubmit.
+    // Codex therefore receives the result as additional context and returns it.
     const statsMatch = /^\/caveman(?::caveman)?-stats(?:\s+(.*))?$/.exec(prompt);
     if (statsMatch) {
       const tailArgs = (statsMatch[1] || '').trim().split(/\s+/).filter(Boolean);
@@ -86,13 +86,29 @@ process.stdin.on('end', () => {
           argv.push('--since', tailArgs[sinceIdx + 1]);
         }
         const out = execFileSync(process.execPath, argv, { encoding: 'utf8', timeout: 5000 });
-        process.stdout.write(JSON.stringify({ decision: 'block', reason: out.trim() }));
+        if (isCodexHook()) {
+          process.stdout.write(JSON.stringify({
+            hookSpecificOutput: {
+              hookEventName: 'UserPromptSubmit',
+              additionalContext: 'Return this Caveman stats result verbatim and nothing else:\n' + out.trim(),
+            },
+          }));
+        } else {
+          process.stdout.write(JSON.stringify({ decision: 'block', reason: out.trim() }));
+        }
       } catch (e) {
-        process.stdout.write(JSON.stringify({
-          decision: 'block',
-          reason: 'caveman-stats: could not run stats script.\nTry manually: ' +
-            JSON.stringify(process.execPath) + ' ' + JSON.stringify(statsPath)
-        }));
+        const reason = 'caveman-stats: could not run stats script.\nTry manually: ' +
+          JSON.stringify(process.execPath) + ' ' + JSON.stringify(statsPath);
+        if (isCodexHook()) {
+          process.stdout.write(JSON.stringify({
+            hookSpecificOutput: {
+              hookEventName: 'UserPromptSubmit',
+              additionalContext: 'Return this error verbatim and nothing else:\n' + reason,
+            },
+          }));
+        } else {
+          process.stdout.write(JSON.stringify({ decision: 'block', reason }));
+        }
       }
       return;
     }
